@@ -15,7 +15,7 @@ from .simmim import build_simmim
 def build_model(config, is_pretrain=False):
     model_type = config.MODEL.TYPE
 
-    # accelerate layernorm
+    # accelerate layernorm 比pytorch自带的快
     if config.FUSED_LAYERNORM:
         try:
             import apex as amp

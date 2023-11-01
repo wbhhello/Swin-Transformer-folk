@@ -94,6 +94,8 @@ def build_loader_simmim(config):
     dataset = ImageFolder(config.DATA.DATA_PATH, transform)
     
     sampler = DistributedSampler(dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
-    dataloader = DataLoader(dataset, config.DATA.BATCH_SIZE, sampler=sampler, num_workers=config.DATA.NUM_WORKERS, pin_memory=True, drop_last=True, collate_fn=collate_fn)
+    dataloader = DataLoader(dataset, config.DATA.BATCH_SIZE, sampler=sampler,
+                            num_workers=config.DATA.NUM_WORKERS, pin_memory=True,
+                            drop_last=True, collate_fn=collate_fn)
     
     return dataloader

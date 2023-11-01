@@ -447,6 +447,7 @@ class PatchEmbed(nn.Module):
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
         super().__init__()
+        # 确保是一个2元素的元组
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -457,7 +458,7 @@ class PatchEmbed(nn.Module):
 
         self.in_chans = in_chans
         self.embed_dim = embed_dim
-
+        # 带步长卷积实现分块的同时进行Embedding
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
@@ -469,7 +470,7 @@ class PatchEmbed(nn.Module):
         # FIXME look at relaxing size constraints
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
+        x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C ph、pw表示块
         if self.norm is not None:
             x = self.norm(x)
         return x
@@ -536,12 +537,14 @@ class SwinTransformer(nn.Module):
         # absolute position embedding
         if self.ape:
             self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
+            # 截断正态分布初始化,避免偏差过大
             trunc_normal_(self.absolute_pos_embed, std=.02)
 
         self.pos_drop = nn.Dropout(p=drop_rate)
 
-        # stochastic depth
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+        # stochastic depth，随机丢弃模型层
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
+        # stochastic depth decay rule
 
         # build layers
         self.layers = nn.ModuleList()
@@ -564,6 +567,10 @@ class SwinTransformer(nn.Module):
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
+        # 这是模型的头部，它将从之前的层得到的特征进行处理，以产生最终的输出。如果 num_classes 大于0，
+        # 表示这是一个分类任务，那么这个头部将包含一个线性层，它将输入特征映射到 num_classes 个类别的输出。
+        # 如果 num_classes 不大于0，这意味着这是一个特征提取任务而不是分类任务，那么这个头部将是一个恒等映射层，
+        # 直接输出输入特征。
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
         self.apply(self._init_weights)

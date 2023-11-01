@@ -82,9 +82,11 @@ def parse_option():
 
 
 def main(config):
+    # 构建数据集
     dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(config)
 
     logger.info(f"Creating model:{config.MODEL.TYPE}/{config.MODEL.NAME}")
+    # 创建模型
     model = build_model(config)
     logger.info(str(model))
 
@@ -194,6 +196,7 @@ def train_one_epoch(config, model, criterion, data_loader, optimizer, epoch, mix
         grad_norm = loss_scaler(loss, optimizer, clip_grad=config.TRAIN.CLIP_GRAD,
                                 parameters=model.parameters(), create_graph=is_second_order,
                                 update_grad=(idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0)
+        # config.TRAIN.ACCUMULATION_STEPS 用于批量更新
         if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
             optimizer.zero_grad()
             lr_scheduler.step_update((epoch * num_steps + idx) // config.TRAIN.ACCUMULATION_STEPS)
@@ -237,17 +240,21 @@ def validate(config, data_loader, model):
 
     end = time.time()
     for idx, (images, target) in enumerate(data_loader):
+        # non_blocking=True 表示将异步操作启用，以提高数据传输的效率。
         images = images.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
         # compute output
+        # 混合精度训练的主要思想是在训练期间使用较低的数值精度（通常是半精度浮点数，即 FP16）来执行前向传播和反向传播，
+        # 以减少内存占用和加速计算。然后，在参数更新时，使用全精度浮点数（通常是 FP32）来保持参数精度。
+        # 这可以显著加速深度学习模型的训练，尤其是在配备了适当硬件的情况下。
         with torch.cuda.amp.autocast(enabled=config.AMP_ENABLE):
             output = model(images)
 
         # measure accuracy and record loss
         loss = criterion(output, target)
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
+        # 如果是分布式训练，优化
         acc1 = reduce_tensor(acc1)
         acc5 = reduce_tensor(acc5)
         loss = reduce_tensor(loss)
@@ -274,6 +281,7 @@ def validate(config, data_loader, model):
 
 
 @torch.no_grad()
+# 测量神经网络模型在数据集上的吞吐量的函数
 def throughput(data_loader, model, logger):
     model.eval()
 
@@ -295,7 +303,7 @@ def throughput(data_loader, model, logger):
 
 if __name__ == '__main__':
     args, config = parse_option()
-
+    # 主要功能是设置分布式训练的环境
     if config.AMP_OPT_LEVEL:
         print("[warning] Apex amp has been deprecated, please use pytorch amp instead!")
 
@@ -309,15 +317,22 @@ if __name__ == '__main__':
     torch.cuda.set_device(config.LOCAL_RANK)
     torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
     torch.distributed.barrier()
-
+    # 固定随机种子
     seed = config.SEED + dist.get_rank()
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    # cudnn.benchmark = True 是一个PyTorch中的设置，用于优化CuDNN（CUDA深度神经网络库）的性能。
+    # 当将其设置为True时，PyTorch会尝试查找最适合当前输入大小的CuDNN卷积算法。
+    # 这通常会导致更快的训练速度，因为选择适当的算法可以显著提高卷积层的性能。
+    # 需要注意的是，cudnn.benchmark 的设置通常只在模型的输入大小不会变化的情况下使用。
+    # 如果输入大小会经常变化（例如，使用批量大小变化的数据加载器），则最好将其设置为False。
+    # 因为查找适当的算法需要一些额外的时间，这可能会导致批次之间的不稳定性。
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal
+    # 动态调整学习率，以适应不同的批量大小和分布式设置，以确保在分布式训练中获得最佳性能
     linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
     linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
     linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
