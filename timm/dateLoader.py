@@ -34,14 +34,14 @@ class CustomDataset(Dataset):
         if img.mode != 'RGB':
             img = img.convert('RGB')
         label = self.labels[idx]  # 获取标签
-        img = self.transform(img)
-        # print(f'label{label},image{img}')
+        if self.transform:
+            img = self.transform(img)
         return img, label
 
 
 # 假设你的数据集为custom_dataset，包含所有的图像和标签
-def getData(data_list: tuple, transform):
-    custom_dataset = CustomDataset(data_list[0], data_list[1], transform)
+def getData(img_dir, labels_file, transform):
+    custom_dataset = CustomDataset(img_dir, labels_file, transform)
     total_size = len(custom_dataset)
     train_size = int(0.9 * total_size)
     test_size = total_size - train_size
@@ -50,10 +50,8 @@ def getData(data_list: tuple, transform):
     return train_dataset, test_dataset
 
 
-def getDataLoader(data_path=None, transform=None):
-    data_path = data_path if data_path else (
-        '../checkpoint/ILSVRC2012_img_val', '../checkpoint/ILSVRC2012_validation_ground_truth.txt')
-    train_dataset, test_dataset = getData(data_path, transform)
+def getDataLoader(img_dir, labels_file, transform=None):
+    train_dataset, test_dataset = getData(img_dir, labels_file, transform)
     batch_size = 16  # 设置适当的批量大小
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
@@ -64,9 +62,9 @@ def getDataLoader(data_path=None, transform=None):
     return train_dataloader, test_dataloader
 
 
-def main():
-    getDataLoader(transform=data_transform)
+# def main():
+#     getDataLoader(transform=data_transform)
 
 
-if __name__ == main():
-    main()
+# if __name__ == main():
+#     main()
